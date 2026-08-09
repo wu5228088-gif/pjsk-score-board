@@ -1,6 +1,40 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+type RankingRow = {
+  rank: number;
+  name: string;
+  score: number;
+  last_score?: number;
+  last_played_at?: string;
+  last_player_info?: {
+    profile?: {
+      id?: number | string;
+    };
+  };
+};
+
+type PlayerRow = {
+  id: string;
+  external_id: string;
+};
+
+type RecentPlay = {
+  player_id: string;
+  played_at: string;
+  play_score: number;
+  source_type: string | null;
+};
+
+function median(values: number[]) {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
 export async function POST(req: NextRequest) {
   const secret = req.headers.get("x-sync-secret");
 
@@ -8,11 +42,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const apiUrl = process.env.RANKING_API_URL!;
+  const apiUrl = process.env.RANKING_API_URL;
 
-  const res = await fetch(apiUrl, {
-    cache: "no-store",
-  });
+  if (!apiUrl) {
+    return NextResponse.json(
+      { error: "RANKING_API_URL is not configured" },
+      { status: 500 }
+    );
+  }
+
+  const res = await fetch(apiUrl, { cache: "no-store" });
 
   if (!res.ok) {
     return NextResponse.json(
@@ -22,14 +61,38 @@ export async function POST(req: NextRequest) {
   }
 
   const apiData = await res.json();
-
   const eventId = Number(apiData.id);
   const eventName = apiData.name;
   const server = "tw";
   const fetchedAt = new Date().toISOString();
-  const rows = apiData.player_top_100_rankings ?? [];
+  const rows = (apiData.player_top_100_rankings ?? []) as RankingRow[];
 
-  await supabaseAdmin.from("events").upsert({
+  if (!Number.isFinite(eventId)) {
+    return NextResponse.json({ error: "Invalid event id" }, { status: 500 });
+  }
+
+  const validRows = rows
+    .map((row) => {
+      const profileId = row.last_player_info?.profile?.id;
+      if (!profileId) return null;
+
+      return {
+        row,
+        externalId: String(profileId),
+        name: row.name,
+        rank: Number(row.rank),
+        score: Number(row.score),
+        lastScore: Number(row.last_score ?? 0),
+        lastPlayedAt: row.last_played_at ?? null,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null);
+
+  const uniquePlayers = Array.from(
+    new Map(validRows.map((item) => [item.externalId, item])).values()
+  );
+
+  const { error: eventError } = await supabaseAdmin.from("events").upsert({
     id: eventId,
     name: eventName,
     server,
@@ -37,236 +100,135 @@ export async function POST(req: NextRequest) {
     ends_at: apiData.closed_at,
   });
 
-  for (const row of rows) {
-    const profileId = row.last_player_info?.profile?.id;
+  if (eventError) {
+    return NextResponse.json({ error: eventError.message }, { status: 500 });
+  }
 
-    if (!profileId) {
-      continue;
-    }
+  const { data: players, error: playersError } = await supabaseAdmin
+    .from("players")
+    .upsert(
+      uniquePlayers.map((item) => ({
+        server,
+        external_id: item.externalId,
+        name: item.name,
+        updated_at: fetchedAt,
+      })),
+      { onConflict: "server,external_id" }
+    )
+    .select("id, external_id");
 
-    const externalId = String(profileId);
-    const name = row.name;
-    const rank = Number(row.rank);
-    const score = Number(row.score);
-    const lastScore = Number(row.last_score ?? 0);
-    const lastPlayedAt = row.last_played_at;
+  if (playersError) {
+    return NextResponse.json({ error: playersError.message }, { status: 500 });
+  }
 
-    const { data: player, error: playerError } = await supabaseAdmin
-      .from("players")
-      .upsert(
-        {
-          server,
-          external_id: externalId,
-          name,
-          updated_at: fetchedAt,
-        },
-        {
-          onConflict: "server,external_id",
-        }
-      )
-      .select()
-      .single();
+  const playerByExternalId = new Map(
+    ((players ?? []) as PlayerRow[]).map((player) => [
+      player.external_id,
+      player.id,
+    ])
+  );
 
-    if (playerError) {
-      return NextResponse.json({ error: playerError.message }, { status: 500 });
-    }
+  const rankingPayload = validRows
+    .map((item) => {
+      const playerId = playerByExternalId.get(item.externalId);
+      if (!playerId) return null;
 
-    const { data: previous } = await supabaseAdmin
-      .from("ranking_snapshots")
-      .select("id, score, fetched_at")
-      .eq("event_id", eventId)
-      .eq("server", server)
-      .eq("player_id", player.id)
-      .order("fetched_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const { data: snapshot, error: snapshotError } = await supabaseAdmin
-      .from("ranking_snapshots")
-      .insert({
+      return {
         event_id: eventId,
         server,
         fetched_at: fetchedAt,
-        rank,
-        player_id: player.id,
-        score,
-        raw_data: row,
-      })
-      .select()
-      .single();
+        rank: item.rank,
+        player_id: playerId,
+        score: item.score,
+        raw_data: item.row,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null);
 
-    if (snapshotError) {
-      return NextResponse.json(
-        { error: snapshotError.message },
-        { status: 500 }
-      );
-    }
+  const { error: snapshotError } = await supabaseAdmin
+    .from("ranking_snapshots")
+    .insert(rankingPayload);
 
-if (lastPlayedAt && lastScore > 0) {
-  const { data: previousPlay } = await supabaseAdmin
-    .from("play_records")
-    .select("played_at, play_score")
-    .eq("event_id", eventId)
-    .eq("server", server)
-    .eq("player_id", player.id)
-    .order("played_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const { data: recentPlays } = await supabaseAdmin
-    .from("play_records")
-    .select("play_score")
-    .eq("event_id", eventId)
-    .eq("server", server)
-    .eq("player_id", player.id)
-    .eq("source_type", "event")
-    .order("played_at", { ascending: false })
-    .limit(20);
-
-  let secondsSincePreviousPlay: number | null = null;
-
-  if (previousPlay?.played_at) {
-    secondsSincePreviousPlay = Math.floor(
-      (new Date(lastPlayedAt).getTime() -
-        new Date(previousPlay.played_at).getTime()) /
-        1000
-    );
+  if (snapshotError) {
+    return NextResponse.json({ error: snapshotError.message }, { status: 500 });
   }
 
-  const scores = (recentPlays ?? [])
-    .map((play) => Number(play.play_score))
-    .filter((score) => score > 0)
-    .sort((a, b) => a - b);
+  const playerIds = Array.from(playerByExternalId.values());
+  const { data: recentPlayRows } = await supabaseAdmin
+    .from("play_records")
+    .select("player_id, played_at, play_score, source_type")
+    .eq("event_id", eventId)
+    .eq("server", server)
+    .in("player_id", playerIds)
+    .order("played_at", { ascending: false })
+    .limit(2000);
 
-  const medianScore =
-    scores.length > 0 ? scores[Math.floor(scores.length / 2)] : null;
+  const latestPlayByPlayer = new Map<string, RecentPlay>();
+  const eventScoresByPlayer = new Map<string, number[]>();
 
-  const isTooFast =
-    secondsSincePreviousPlay !== null &&
-    secondsSincePreviousPlay > 0 &&
-    secondsSincePreviousPlay < 70;
-
-  const isMuchLowerThanNormal =
-    medianScore !== null &&
-    medianScore >= 10000 &&
-    lastScore < medianScore * 0.25;
-
-  const isMysekai = isTooFast && isMuchLowerThanNormal;
-  const sourceType = isMysekai ? "mysekai" : "event";
-
-  await supabaseAdmin.from("play_records").upsert(
-    {
-      event_id: eventId,
-      server,
-      player_id: player.id,
-      rank,
-      score_before: score - lastScore,
-      score_after: score,
-      play_score: lastScore,
-      played_at: lastPlayedAt,
-      raw_data: row,
-      source_type: sourceType,
-      is_mysekai: isMysekai,
-      seconds_since_previous_play: secondsSincePreviousPlay,
-    },
-    {
-      onConflict: "event_id,server,player_id,played_at",
+  for (const play of (recentPlayRows ?? []) as RecentPlay[]) {
+    if (!latestPlayByPlayer.has(play.player_id)) {
+      latestPlayByPlayer.set(play.player_id, play);
     }
-  );
-}
 
+    if (play.source_type === "event") {
+      const scores = eventScoresByPlayer.get(play.player_id) ?? [];
+      if (scores.length < 20) scores.push(Number(play.play_score));
+      eventScoresByPlayer.set(play.player_id, scores);
+    }
+  }
 
-    if (previous && score > Number(previous.score)) {
-      const startedAt = new Date(previous.fetched_at);
-      const endedAt = new Date(fetchedAt);
-      const secondsElapsed = Math.max(
-        1,
-        Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000)
-      );
+  const playPayload = validRows
+    .map((item) => {
+      const playerId = playerByExternalId.get(item.externalId);
+      if (!playerId || !item.lastPlayedAt || item.lastScore <= 0) return null;
 
-      const deltaScore = score - Number(previous.score);
-      const pointsPerHour = (deltaScore * 3600) / secondsElapsed;
+      const previousPlay = latestPlayByPlayer.get(playerId);
+      const secondsSincePreviousPlay = previousPlay?.played_at
+        ? Math.floor(
+            (new Date(item.lastPlayedAt).getTime() -
+              new Date(previousPlay.played_at).getTime()) /
+              1000
+          )
+        : null;
 
-      await supabaseAdmin.from("score_deltas").insert({
+      const normalMedian = median(eventScoresByPlayer.get(playerId) ?? []);
+      const isTooFast =
+        secondsSincePreviousPlay !== null &&
+        secondsSincePreviousPlay > 0 &&
+        secondsSincePreviousPlay < 70;
+      const isMuchLowerThanNormal =
+        normalMedian !== null &&
+        normalMedian >= 10000 &&
+        item.lastScore < normalMedian * 0.25;
+      const isMysekai = isTooFast && isMuchLowerThanNormal;
+
+      return {
         event_id: eventId,
         server,
-        player_id: player.id,
-        from_snapshot_id: previous.id,
-        to_snapshot_id: snapshot.id,
-        from_score: previous.score,
-        to_score: score,
-        delta_score: deltaScore,
-        started_at: previous.fetched_at,
-        ended_at: fetchedAt,
-        seconds_elapsed: secondsElapsed,
-        points_per_hour: pointsPerHour,
+        player_id: playerId,
+        rank: item.rank,
+        score_before: item.score - item.lastScore,
+        score_after: item.score,
+        play_score: item.lastScore,
+        played_at: item.lastPlayedAt,
+        raw_data: item.row,
+        source_type: isMysekai ? "mysekai" : "event",
+        is_mysekai: isMysekai,
+        seconds_since_previous_play: secondsSincePreviousPlay,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null);
+
+  if (playPayload.length > 0) {
+    const { error: playError } = await supabaseAdmin
+      .from("play_records")
+      .upsert(playPayload, {
+        onConflict: "event_id,server,player_id,played_at",
       });
 
-      const { data: activeParking } = await supabaseAdmin
-        .from("parking_sessions")
-        .select("id, started_at")
-        .eq("event_id", eventId)
-        .eq("server", server)
-        .eq("player_id", player.id)
-        .eq("is_active", true)
-        .maybeSingle();
-
-      if (activeParking) {
-        const parkingStartedAt = new Date(activeParking.started_at);
-        const durationSeconds = Math.floor(
-          (endedAt.getTime() - parkingStartedAt.getTime()) / 1000
-        );
-
-        await supabaseAdmin
-          .from("parking_sessions")
-          .update({
-            ended_at: fetchedAt,
-            duration_seconds: durationSeconds,
-            is_active: false,
-            updated_at: fetchedAt,
-          })
-          .eq("id", activeParking.id);
-      }
-    }
-
-    const { data: lastPlay } = await supabaseAdmin
-      .from("play_records")
-      .select("played_at")
-      .eq("event_id", eventId)
-      .eq("server", server)
-      .eq("player_id", player.id)
-      .order("played_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const lastActiveAt = lastPlay?.played_at ?? previous?.fetched_at;
-
-    if (lastActiveAt) {
-      const idleSeconds = Math.floor(
-        (new Date(fetchedAt).getTime() - new Date(lastActiveAt).getTime()) /
-          1000
-      );
-
-      if (idleSeconds >= 600) {
-        const { data: activeParking } = await supabaseAdmin
-          .from("parking_sessions")
-          .select("id")
-          .eq("event_id", eventId)
-          .eq("server", server)
-          .eq("player_id", player.id)
-          .eq("is_active", true)
-          .maybeSingle();
-
-        if (!activeParking) {
-          await supabaseAdmin.from("parking_sessions").insert({
-            event_id: eventId,
-            server,
-            player_id: player.id,
-            started_at: lastActiveAt,
-            is_active: true,
-          });
-        }
-      }
+    if (playError) {
+      return NextResponse.json({ error: playError.message }, { status: 500 });
     }
   }
 
@@ -274,7 +236,8 @@ if (lastPlayedAt && lastScore > 0) {
     ok: true,
     event_id: eventId,
     event_name: eventName,
-    count: rows.length,
+    count: rankingPayload.length,
+    plays: playPayload.length,
     fetched_at: fetchedAt,
   });
 }

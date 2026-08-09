@@ -1,4 +1,5 @@
 ﻿import Link from "next/link";
+import { AutoRefresh } from "./AutoRefresh";
 import { supabaseBrowser } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +54,7 @@ export default async function HomePage() {
 
   return (
     <main className="min-h-screen p-8">
+      <AutoRefresh />
       <div className="mb-6">
         <h1 className="text-3xl font-bold">前 100 名排行榜</h1>
         <p className="mt-2 text-sm text-gray-600">
@@ -117,3 +119,5 @@ export default async function HomePage() {
     </main>
   );
 }
+
+

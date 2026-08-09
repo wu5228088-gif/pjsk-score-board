@@ -1,5 +1,19 @@
-import { ScoreCharts } from "./ScoreCharts";
+﻿import { ScoreCharts } from "./ScoreCharts";
 import { supabaseBrowser } from "@/lib/supabase";
+
+const taipeiDateTime = new Intl.DateTimeFormat("zh-TW", {
+  timeZone: "Asia/Taipei",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
+function formatTaipeiTime(value: string | null | undefined) {
+  return value ? taipeiDateTime.format(new Date(value)) : "-";
+}
 
 type PlayerPageProps = {
   params: Promise<{
@@ -41,7 +55,7 @@ export default async function PlayerPage({ params }: PlayerPageProps) {
       </a>
 
       <h1 className="mt-4 text-3xl font-bold">{player?.name ?? "玩家"}</h1>
-	<ScoreCharts plays={plays ?? []} snapshots={snapshots ?? []} />
+      <ScoreCharts plays={plays ?? []} snapshots={snapshots ?? []} />
 
       <section className="mt-8">
         <h2 className="mb-3 text-xl font-bold">每一把分數</h2>
@@ -59,9 +73,7 @@ export default async function PlayerPage({ params }: PlayerPageProps) {
           <tbody>
             {plays?.map((play) => (
               <tr key={`${play.played_at}-${play.score_after}`} className="border-b">
-                <td className="p-2">
-                  {new Date(play.played_at).toLocaleString("zh-TW")}
-                </td>
+                <td className="p-2">{formatTaipeiTime(play.played_at)}</td>
                 <td className="p-2">{Number(play.play_score).toLocaleString()}</td>
                 <td className="p-2">{Number(play.score_after).toLocaleString()}</td>
                 <td className="p-2">{play.rank}</td>
@@ -86,14 +98,8 @@ export default async function PlayerPage({ params }: PlayerPageProps) {
           <tbody>
             {parkingSessions?.map((session) => (
               <tr key={session.id} className="border-b">
-                <td className="p-2">
-                  {new Date(session.started_at).toLocaleString("zh-TW")}
-                </td>
-                <td className="p-2">
-                  {session.ended_at
-                    ? new Date(session.ended_at).toLocaleString("zh-TW")
-                    : "-"}
-                </td>
+                <td className="p-2">{formatTaipeiTime(session.started_at)}</td>
+                <td className="p-2">{formatTaipeiTime(session.ended_at)}</td>
                 <td className="p-2">
                   {session.is_active ? "停車中" : "已恢復"}
                 </td>

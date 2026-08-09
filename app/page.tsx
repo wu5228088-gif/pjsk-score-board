@@ -3,6 +3,20 @@ import { supabaseBrowser } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
+const taipeiDateTime = new Intl.DateTimeFormat("zh-TW", {
+  timeZone: "Asia/Taipei",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
+function formatTaipeiTime(value: string | null | undefined) {
+  return value ? taipeiDateTime.format(new Date(value)) : "-";
+}
+
 type LeaderboardRow = {
   event_id: number;
   event_name: string | null;
@@ -43,9 +57,7 @@ export default async function HomePage() {
         <h1 className="text-3xl font-bold">前 100 名排行榜</h1>
         <p className="mt-2 text-sm text-gray-600">
           {eventName}
-          {fetchedAt
-            ? ` · 更新時間 ${new Date(fetchedAt).toLocaleString("zh-TW")}`
-            : ""}
+          {fetchedAt ? ` · 更新時間 ${formatTaipeiTime(fetchedAt)}` : ""}
         </p>
       </div>
 
@@ -81,11 +93,7 @@ export default async function HomePage() {
 
               <td className="p-2">{Number(row.score).toLocaleString()}</td>
 
-              <td className="p-2">
-                {row.last_played_at
-                  ? new Date(row.last_played_at).toLocaleString("zh-TW")
-                  : "-"}
-              </td>
+              <td className="p-2">{formatTaipeiTime(row.last_played_at)}</td>
 
               <td className="p-2">
                 {row.last_play_score !== null && row.last_play_score !== undefined

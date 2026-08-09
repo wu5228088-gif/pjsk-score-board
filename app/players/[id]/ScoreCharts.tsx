@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   LineChart,
@@ -23,6 +23,12 @@ type Snapshot = {
   rank: number;
 };
 
+const taipeiTime = new Intl.DateTimeFormat("zh-TW", {
+  timeZone: "Asia/Taipei",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 export function ScoreCharts({
   plays,
   snapshots,
@@ -31,20 +37,14 @@ export function ScoreCharts({
   snapshots: Snapshot[];
 }) {
   const playData = plays.map((play) => ({
-    time: new Date(play.played_at).toLocaleTimeString("zh-TW", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
+    time: taipeiTime.format(new Date(play.played_at)),
     play_score: Number(play.play_score),
     score_after: Number(play.score_after),
     rank: Number(play.rank),
   }));
 
   const snapshotData = snapshots.map((snapshot) => ({
-    time: new Date(snapshot.fetched_at).toLocaleTimeString("zh-TW", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
+    time: taipeiTime.format(new Date(snapshot.fetched_at)),
     score: Number(snapshot.score),
     rank: Number(snapshot.rank),
   }));

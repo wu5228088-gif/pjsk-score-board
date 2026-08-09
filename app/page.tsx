@@ -18,6 +18,7 @@ type LeaderboardRow = {
   last_play_score: number | null;
   last_play_source_type: string | null;
   parking_started_at: string | null;
+  idle_seconds: number | null;
   is_parking: boolean | null;
 };
 
@@ -63,7 +64,10 @@ export default async function HomePage() {
 
         <tbody>
           {rows.map((row) => (
-            <tr key={`${row.event_id}-${row.player_id}-${row.fetched_at}`} className="border-b">
+            <tr
+              key={`${row.event_id}-${row.player_id}-${row.fetched_at}`}
+              className="border-b"
+            >
               <td className="p-2">{row.rank}</td>
 
               <td className="p-2">
@@ -94,7 +98,9 @@ export default async function HomePage() {
               </td>
 
               <td className="p-2">
-                {row.is_parking ? "停車中" : "進行中"}
+                {row.is_parking
+                  ? `停車中 ${Math.floor(Number(row.idle_seconds ?? 0) / 60)} 分鐘`
+                  : "進行中"}
               </td>
             </tr>
           ))}

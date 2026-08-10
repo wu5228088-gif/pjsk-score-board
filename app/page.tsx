@@ -18,6 +18,20 @@ function formatTaipeiTime(value: string | null | undefined) {
   return value ? taipeiDateTime.format(new Date(value)) : "-";
 }
 
+function formatDuration(seconds: number | null | undefined) {
+  if (seconds === null || seconds === undefined || seconds < 0) return "-";
+
+  const totalMinutes = Math.floor(seconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours > 0) {
+    return `${hours} 小時 ${minutes} 分鐘`;
+  }
+
+  return `${minutes} 分鐘`;
+}
+
 type LeaderboardRow = {
   event_id: number;
   event_name: string | null;
@@ -35,6 +49,7 @@ type LeaderboardRow = {
   parking_started_at: string | null;
   idle_seconds: number | null;
   is_parking: boolean | null;
+  speed_1h: number | null;
 };
 
 export default async function HomePage() {
@@ -69,6 +84,7 @@ export default async function HomePage() {
             <th className="p-2">排名</th>
             <th className="p-2">玩家</th>
             <th className="p-2">分數</th>
+            <th className="p-2">時速</th>
             <th className="p-2">最後一把</th>
             <th className="p-2">最後進帳</th>
             <th className="p-2">來源</th>
@@ -95,6 +111,12 @@ export default async function HomePage() {
 
               <td className="p-2">{Number(row.score).toLocaleString()}</td>
 
+              <td className="p-2">
+                {row.speed_1h !== null && row.speed_1h !== undefined
+                  ? Math.round(Number(row.speed_1h)).toLocaleString()
+                  : "-"}
+              </td>
+
               <td className="p-2">{formatTaipeiTime(row.last_played_at)}</td>
 
               <td className="p-2">
@@ -109,7 +131,7 @@ export default async function HomePage() {
 
               <td className="p-2">
                 {row.is_parking
-                  ? `停車中 ${Math.floor(Number(row.idle_seconds ?? 0) / 60)} 分鐘`
+                  ? `停車中 ${formatDuration(row.idle_seconds)}`
                   : "進行中"}
               </td>
             </tr>
@@ -119,5 +141,3 @@ export default async function HomePage() {
     </main>
   );
 }
-
-

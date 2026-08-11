@@ -15,6 +15,8 @@ type PlayRecord = {
   play_score: number;
   score_after: number;
   rank: number;
+  source_type?: string | null;
+  exclude_from_chart?: boolean | null;
 };
 
 type Snapshot = {
@@ -36,12 +38,14 @@ export function ScoreCharts({
   plays: PlayRecord[];
   snapshots: Snapshot[];
 }) {
-  const playData = plays.map((play) => ({
-    time: taipeiTime.format(new Date(play.played_at)),
-    play_score: Number(play.play_score),
-    score_after: Number(play.score_after),
-    rank: Number(play.rank),
-  }));
+  const playData = plays
+    .filter((play) => !play.exclude_from_chart)
+    .map((play) => ({
+      time: taipeiTime.format(new Date(play.played_at)),
+      play_score: Number(play.play_score),
+      score_after: Number(play.score_after),
+      rank: Number(play.rank),
+    }));
 
   const snapshotData = snapshots.map((snapshot) => ({
     time: taipeiTime.format(new Date(snapshot.fetched_at)),

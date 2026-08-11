@@ -42,6 +42,9 @@ type LeaderboardRow = {
   board_label: string | null;
   chapter: number | null;
   character: number | null;
+  board_starts_at: string | null;
+  board_ends_at: string | null;
+  is_board_closed: boolean | null;
   fetched_at: string;
   rank: number;
   score: number;
@@ -98,6 +101,7 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
   const eventName = rows[0]?.event_name ?? "目前活動";
   const fetchedAt = rows[0]?.fetched_at;
   const currentBoardName = rows[0] ? boardName(rows[0]) : "總榜";
+  const isBoardClosed = Boolean(rows[0]?.is_board_closed);
 
   return (
     <main className="min-h-screen p-8">
@@ -106,6 +110,7 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
         <h1 className="text-3xl font-bold">前 100 名排行榜</h1>
         <p className="mt-2 text-sm text-gray-600">
           {eventName} · {currentBoardName}
+          {isBoardClosed ? " · 已關閉" : ""}
           {fetchedAt ? ` · 更新時間 ${formatTaipeiTime(fetchedAt)}` : ""}
         </p>
       </div>
@@ -130,17 +135,25 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
 
       <table className="w-full border-collapse">
         <thead>
-          <tr className="border-b text-left">
-            <th className="p-2">排名</th>
-            <th className="p-2">玩家</th>
-            <th className="p-2">分數</th>
-            <th className="p-2">時速</th>
-            <th className="p-2">周回</th>
-            <th className="p-2">最後一把</th>
-            <th className="p-2">最後進帳</th>
-            <th className="p-2">來源</th>
-            <th className="p-2">狀態</th>
-          </tr>
+          {isBoardClosed ? (
+            <tr className="border-b text-left">
+              <th className="p-2">排名</th>
+              <th className="p-2">玩家</th>
+              <th className="p-2">分數</th>
+            </tr>
+          ) : (
+            <tr className="border-b text-left">
+              <th className="p-2">排名</th>
+              <th className="p-2">玩家</th>
+              <th className="p-2">分數</th>
+              <th className="p-2">時速</th>
+              <th className="p-2">周回</th>
+              <th className="p-2">最後一把</th>
+              <th className="p-2">最後進帳</th>
+              <th className="p-2">來源</th>
+              <th className="p-2">狀態</th>
+            </tr>
+          )}
         </thead>
 
         <tbody>
@@ -159,39 +172,43 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
 
               <td className="p-2">{Number(row.score).toLocaleString()}</td>
 
-              <td className="p-2">
-                {row.speed_1h !== null && row.speed_1h !== undefined
-                  ? Math.round(Number(row.speed_1h)).toLocaleString()
-                  : "-"}
-              </td>
+              {!isBoardClosed && (
+                <>
+                  <td className="p-2">
+                    {row.speed_1h !== null && row.speed_1h !== undefined
+                      ? Math.round(Number(row.speed_1h)).toLocaleString()
+                      : "-"}
+                  </td>
 
-              <td className="p-2">
-                {row.run_count_1h !== null && row.run_count_1h !== undefined
-                  ? Number(row.run_count_1h).toLocaleString()
-                  : "-"}
-              </td>
+                  <td className="p-2">
+                    {row.run_count_1h !== null && row.run_count_1h !== undefined
+                      ? Number(row.run_count_1h).toLocaleString()
+                      : "-"}
+                  </td>
 
-              <td className="p-2">{formatTaipeiTime(row.last_played_at)}</td>
+                  <td className="p-2">{formatTaipeiTime(row.last_played_at)}</td>
 
-              <td className="p-2">
-                {row.last_play_score !== null && row.last_play_score !== undefined
-                  ? Number(row.last_play_score).toLocaleString()
-                  : "-"}
-              </td>
+                  <td className="p-2">
+                    {row.last_play_score !== null && row.last_play_score !== undefined
+                      ? Number(row.last_play_score).toLocaleString()
+                      : "-"}
+                  </td>
 
-              <td className="p-2">
-                {row.last_play_source_type === "mysekai"
-                  ? "MySekai"
-                  : row.last_play_source_type === "entry"
-                    ? "入榜"
-                    : "活動"}
-              </td>
+                  <td className="p-2">
+                    {row.last_play_source_type === "mysekai"
+                      ? "MySekai"
+                      : row.last_play_source_type === "entry"
+                        ? "入榜"
+                        : "活動"}
+                  </td>
 
-              <td className="p-2">
-                {row.is_parking
-                  ? `停車中 ${formatDuration(row.idle_seconds)}`
-                  : "進行中"}
-              </td>
+                  <td className="p-2">
+                    {row.is_parking
+                      ? `停車中 ${formatDuration(row.idle_seconds)}`
+                      : "進行中"}
+                  </td>
+                </>
+              )}
             </tr>
           ))}
         </tbody>

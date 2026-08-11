@@ -27,6 +27,8 @@ type WorldLinkBoard = {
   id: number;
   chapter?: number;
   character?: number;
+  start_at?: string;
+  closed_at?: string;
   player_rankings?: RankingRow[];
 };
 
@@ -36,6 +38,8 @@ type Board = {
   boardLabel: string;
   chapter: number | null;
   character: number | null;
+  startsAt: string | null;
+  endsAt: string | null;
   rows: RankingRow[];
 };
 
@@ -109,6 +113,8 @@ export async function POST(req: NextRequest) {
       boardLabel: "總榜",
       chapter: null,
       character: null,
+      startsAt: apiData.start_at ?? null,
+      endsAt: apiData.closed_at ?? null,
       rows: apiData.player_top_100_rankings ?? [],
     },
     ...((apiData.world_link_top_100_rankings ?? []) as WorldLinkBoard[]).map(
@@ -118,6 +124,8 @@ export async function POST(req: NextRequest) {
         boardLabel: `角色榜 ${board.character}`,
         chapter: board.chapter ?? null,
         character: board.character ?? null,
+        startsAt: board.start_at ?? null,
+        endsAt: board.closed_at ?? null,
         rows: board.player_rankings ?? [],
       })
     ),
@@ -197,6 +205,8 @@ export async function POST(req: NextRequest) {
         board_label: item.board.boardLabel,
         chapter: item.board.chapter,
         character: item.board.character,
+        board_starts_at: item.board.startsAt,
+        board_ends_at: item.board.endsAt,
         fetched_at: fetchedAt,
         rank: item.rank,
         player_id: playerId,
@@ -277,6 +287,8 @@ export async function POST(req: NextRequest) {
         board_label: item.board.boardLabel,
         chapter: item.board.chapter,
         character: item.board.character,
+        board_starts_at: item.board.startsAt,
+        board_ends_at: item.board.endsAt,
         player_id: playerId,
         rank: item.rank,
         score_before: item.score - item.lastScore,
@@ -357,3 +369,4 @@ export async function POST(req: NextRequest) {
     fetched_at: fetchedAt,
   });
 }
+

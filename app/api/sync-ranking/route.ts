@@ -98,8 +98,6 @@ export async function POST(req: NextRequest) {
   const eventName = apiData.name;
   const server = "tw";
   const fetchedAt = new Date().toISOString();
-  const fetchedDate = new Date(fetchedAt);
-  const shouldCaptureHourly = fetchedDate.getUTCMinutes() === 0;
   const capturedHour = getCapturedHour(fetchedAt);
 
   if (!Number.isFinite(eventId)) {
@@ -287,8 +285,6 @@ export async function POST(req: NextRequest) {
         board_label: item.board.boardLabel,
         chapter: item.board.chapter,
         character: item.board.character,
-        board_starts_at: item.board.startsAt,
-        board_ends_at: item.board.endsAt,
         player_id: playerId,
         rank: item.rank,
         score_before: item.score - item.lastScore,
@@ -319,8 +315,7 @@ export async function POST(req: NextRequest) {
 
   let hourlyCount = 0;
 
-  if (shouldCaptureHourly) {
-    const hourlyPayload = flatRows
+  const hourlyPayload = flatRows
       .map((item) => {
         const playerId = playerByExternalId.get(item.externalId);
         if (!playerId) return null;
@@ -356,8 +351,6 @@ export async function POST(req: NextRequest) {
 
       hourlyCount = hourlyPayload.length;
     }
-  }
-
   return NextResponse.json({
     ok: true,
     event_id: eventId,
@@ -369,4 +362,6 @@ export async function POST(req: NextRequest) {
     fetched_at: fetchedAt,
   });
 }
+
+
 

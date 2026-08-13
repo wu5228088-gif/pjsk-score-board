@@ -62,9 +62,24 @@ type LeaderboardRow = {
   run_count_1h: number | null;
 };
 
-function boardName(row: Pick<LeaderboardRow, "board_type" | "board_label" | "character">) {
+type BoardOption = Pick<
+  LeaderboardRow,
+  "board_id" | "board_type" | "board_label" | "chapter" | "character" | "board_ends_at" | "is_board_closed"
+>;
+
+function isClosedBoard(row: Pick<LeaderboardRow, "board_ends_at" | "is_board_closed">) {
+  if (row.is_board_closed) return true;
+  return row.board_ends_at ? new Date(row.board_ends_at).getTime() <= Date.now() : false;
+}
+
+function boardName(row: Pick<LeaderboardRow, "board_type" | "board_label" | "chapter" | "character" | "board_ends_at" | "is_board_closed">) {
   if (row.board_type === "overall") return "總榜";
-  return row.board_label ?? `角色榜 ${row.character ?? ""}`;
+
+  const chapter = row.chapter ? `第 ${row.chapter} 章` : "角色榜";
+  const character = row.character ? `角色 ${row.character}` : row.board_label ?? "角色榜";
+  const status = isClosedBoard(row) ? "已關閉" : "進行中";
+
+  return `${chapter} · ${character} · ${status}`;
 }
 
 export default async function HomePage({ searchParams }: { searchParams: SearchParams }) {
@@ -73,18 +88,27 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
 
   const { data: optionRows } = await supabaseBrowser
     .from("current_leaderboard_status")
-    .select("board_id, board_type, board_label, character")
-    .order("board_type", { ascending: true })
-    .order("character", { ascending: true });
+    .select("board_id, board_type, board_label, chapter, character, board_ends_at, is_board_closed")
+    .order("board_type", { ascending: false })
+    .order("chapter", { ascending: true });
 
   const boardOptions = Array.from(
     new Map(
-      ((optionRows ?? []) as Pick<LeaderboardRow, "board_id" | "board_type" | "board_label" | "character">[]).map((row) => [
+      ((optionRows ?? []) as BoardOption[]).map((row) => [
         row.board_id,
         row,
       ])
     ).values()
-  );
+  ).sort((a, b) => {
+    if (a.board_type !== b.board_type) return a.board_type === "overall" ? -1 : 1;
+    if (a.board_type === "overall") return 0;
+
+    const aClosed = isClosedBoard(a);
+    const bClosed = isClosedBoard(b);
+    if (aClosed !== bClosed) return aClosed ? 1 : -1;
+
+    return (a.chapter ?? 999) - (b.chapter ?? 999);
+  });
 
   const { data, error } = await supabaseBrowser
     .from("current_leaderboard_status")
@@ -198,7 +222,7 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
                     {row.last_play_source_type === "mysekai"
                       ? "MySekai"
                       : row.last_play_source_type === "entry"
-                        ? "入榜"
+                        ? "-"
                         : "活動"}
                   </td>
 
@@ -216,3 +240,6 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
     </main>
   );
 }
+
+
+

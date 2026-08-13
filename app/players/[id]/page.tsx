@@ -118,7 +118,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
                 <td className="p-2">{play.rank}</td>
                 <td className="p-2">
                   {play.source_type === "entry"
-                    ? "入榜"
+                    ? "-"
                     : play.source_type === "mysekai"
                       ? "MySekai"
                       : "活動"}
@@ -131,3 +131,5 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
     </main>
   );
 }
+
+

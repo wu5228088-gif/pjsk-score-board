@@ -356,12 +356,23 @@ export async function POST(req: NextRequest) {
     event_id: eventId,
     event_name: eventName,
     boards: boards.length,
+    board_counts: boards.map((board) => ({
+      board_id: board.boardId,
+      board_type: board.boardType,
+      chapter: board.chapter,
+      character: board.character,
+      rows: board.rows.length,
+      starts_at: board.startsAt,
+      ends_at: board.endsAt,
+    })),
     count: rankingPayload.length,
     plays: playPayload.length,
     hourly: hourlyCount,
     fetched_at: fetchedAt,
   });
 }
+
+
 
 
 

@@ -3,6 +3,8 @@ import { AutoRefresh } from "./AutoRefresh";
 import { supabaseBrowser } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 const taipeiDateTime = new Intl.DateTimeFormat("zh-TW", {
   timeZone: "Asia/Taipei",
@@ -240,6 +242,7 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
     </main>
   );
 }
+
 
 
 
